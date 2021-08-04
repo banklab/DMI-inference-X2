@@ -1,6 +1,5 @@
 #!/bin/sh
 
-###### This shell script contains most key simulation and analyses scripts. To avoid confusion, small scripts are only available upon request.
 
 wdir=`pwd`
 code=$wdir/code
