@@ -1,0 +1,264 @@
+// Only divergence between parental population are included. New mutations are not allowed
+// Paramters include,
+// 1. the starting frequency. freqP1, freqP2
+// 2. migration. mP1, mP2
+// 3. population expansion
+// 4a. DMI1, alpha(a1), beta(b1), gamma(epi1), dmi1P1, dmi1P2;
+// 4b. DMI2, alpha(a2), beta(b2), gamma(epi2), dmi2P1, dmi2P2; Direct selection can be added by the second DMI, I will not consider the two DMI with direct selection. I include the second DMI, but I prefer to use it as one or two direct selection loci.
+// 5. population size change. Constant, population size increasing.
+
+
+initialize(){
+
+// hybrid population parameters; and the demography
+	// the starting fequencies of parental populations
+	if(!exists("freqP1"))
+		defineConstant("freqP1", 0.5);
+	defineConstant("freqP2", 1-freqP1);
+	// migration; default, no migration at al.
+	if(!exists("mP1"))
+		defineConstant("mP1", 0);
+	if(!exists("mP2"))
+		defineConstant("mP2", 0);
+	// population growth rate; starting population size of the hybrid population (n0P3); the final population size (nP3); growth rate
+	if(!exists("n0P3"))
+		defineConstant("n0P3", 5000);
+	if(!exists("cP3"))
+		defineConstant("cP3", 5000);
+	if(!exists("growthR"))
+		defineConstant("growthR", 0);
+
+// the first DMI; default is no epistasis, no selection
+	if(!exists("a1"))
+		defineConstant("a1", rexp(1, 0.001));
+	if(!exists("b1"))
+		defineConstant("b1", rexp(1, 0.001));
+	if(!exists("epi1"))
+		defineConstant("epi1", runif(1, min=-1, max=0));
+	if(!exists("dmi1P1"))
+		defineConstant("dmi1P1",runif(1, min=0, max=1)); // use genetic map instead of the physical coordinate. 
+	if(!exists("dmi1P2"))
+		defineConstant("dmi1P2", runif(1, min=0, max=1));
+
+// the first DMI; default is no epistasis, no selection
+	if(!exists("a2"))
+		defineConstant("a2", rexp(1, 0.001));
+	if(!exists("b2"))
+		defineConstant("b2", rexp(1, 0.001));
+	if(!exists("epi2"))
+		defineConstant("epi2", runif(1, min=-1, max=0));
+	if(!exists("dmi2P1"))
+		defineConstant("dmi2P1", runif(1, min=0, max=1)); // use genetic map instead of the physical coordinate. 
+	if(!exists("dmi2P2"))
+		defineConstant("dmi2P2", runif(1, min=0, max=1));
+
+// others, output, seed and # of markers
+	if(!exists("outPath"))
+		defineConstant("outPath", "./tmp.1");
+	if(!exists("genomeOut"))
+		defineConstant("genomeOut", 1);
+	if(!exists("seed"))
+		defineConstant("seed", 42);
+	defineConstant("dL", 400);
+	defineConstant("L", 600);
+
+
+	setSeed(rdunif(1, 0, asInteger(2^62) - 1));
+	setSeed(getSeed() + 1);
+
+	initializeMutationRate(0); // no new mutations, we only consider the divergence between parental populations.
+
+// set markers
+	initializeMutationType("m1", 0.5, "f", 0.0); // Epi-markers for tracking from population 1.
+	initializeMutationType("m2", 0.5, "f", 0.0); // Chromosome markers
+	m1.convertToSubstitution = F;
+	m2.convertToSubstitution = F;
+
+//define a chromosome and use allele type from population 1.
+	initializeGenomicElementType("g1", m2, 1.0);
+	initializeGenomicElement(g1, 0, L-1);  // 1k markers
+
+	rates=c(0.01,0.5,0.01, 0.5, 0.01, 0.5,0.01, 0.5, 0.01, 0.5, 0.01);
+	ends=c(99, 100, 199, 200, 299, 300, 399, 400, 499, 500, 599);
+	initializeRecombinationRate(rates, ends); // recombination rate is 1 for the whole chromosome
+	initializeSex("A"); // autosome
+
+// DMI 1
+	initializeMutationType("m11", 0, "f", 0); // ## recessive. The dominance does not matter, because the fitness is redefined.
+	m11.convertToSubstitution = F;
+	initializeMutationType("m12", 0, "f", 0); // ## recessive
+	m12.convertToSubstitution = F;
+
+// DMI 2
+	initializeMutationType("m21", 0, "f", 0); // ## recessive. The dominance does not matter, because the fitness is redefined.
+	m11.convertToSubstitution = F;
+	initializeMutationType("m22", 0, "f", 0); // ## recessive
+	m12.convertToSubstitution = F;
+
+
+	par=paste(c(epi1, dmi1P1, dmi1P2, epi2, dmi2P1, dmi2P2, asInteger(dL*dmi1P1), asInteger(dL*dmi1P2), asInteger(dL*dmi2P1), asInteger(dL*dmi2P2), a1, b2, a2, b2), sep="\t");
+	
+//	writeFile(outPath, paste(c(epi1, dmi1P1, dmi1P2, epi2, dmi2P1, dmi2P2),sep="\t"));
+	writeFile(outPath, par);
+	
+	writeFile(paste(c(outPath, ".frq"), sep=""), paste(c("Generation", "gab1", "gAb1", "gaB1", "gAB1", "gab2", "gAb2", "gaB2", "gAB2", "GenomeNum"),sep="\t"));
+	if(genomeOut==1) {
+		for(Gen in c(30, 50)) {
+			writeFile(paste(c(outPath, ".F", Gen), sep=""), paste(c("#########dmi.G", Gen, ".genome########"), sep=""));
+		}
+	}
+
+}
+
+// create the ancestral populations
+1{
+	sim.addSubpop("p1", 5000);
+	sim.addSubpop("p2", 5000);
+}
+
+// hybridization
+1 late(){
+	p1.genomes.addNewDrawnMutation(m11, asInteger(dL*dmi1P1)); // DMI 1 
+	p2.genomes.addNewDrawnMutation(m12, asInteger(dL*dmi1P2));
+
+	p2.genomes.addNewDrawnMutation(m21, asInteger(dL*dmi2P1)); // DMI 1 
+	p1.genomes.addNewDrawnMutation(m22, asInteger(dL*dmi2P2));
+	
+	p1.genomes.addNewMutation(m1, 0.0, 0:(L-1)); // epi-markers for tracing alleles from populatoin 1 along the chromosome
+
+	sim.addSubpop("p3", n0P3);
+	p3.setMigrationRates(c(p1, p2), c(freqP1, freqP2)); // G0
+}
+
+// Generation 2, offsprings are the offsprings from population 1 and population 2. So F1 will be produced in Generation 3.
+
+// Mating in population 3 are very complicated. P1 X P1; P2 X P2; P1 X P2; P2 X P1. 
+
+// F2-F200 migration & population expansion. Schumer et al. 2016, the migaration rate from parental population 0.0002-0.01. The high migration rate is 0.01; the low migration rate is 0.0002; The population growth rate must be less than 1.02.
+3:54 {
+	p3.setMigrationRates(c(p1, p2), c(mP1, mP2)); // set migreation rate
+
+	newSize = asInteger(round((1+growthR)^(sim.generation-1)*n0P3)); //population growth
+	if (newSize > cP3)
+		newSize = cP3;
+	p3.setSubpopulationSize(newSize);
+}
+
+
+// DMI; the modifyChild can be thought of as representing juvenile mortality, thus all the selection will happen in the juvenile stage.
+
+3:54 modifyChild(p3){
+	childGenomes=c(childGenome1, childGenome2);
+
+// assume all the epistasis is negative and the effect is larger than direct selection. The haplotype with any DMI is less fit than the haplotype without DMI.
+// use relative fitness.
+
+	Mut11=sum(childGenomes.countOfMutationsOfType(m11));
+	Mut12=sum(childGenomes.countOfMutationsOfType(m12));
+	if (Mut11+Mut12>2){
+		fit1=(1-a1)^(2-Mut11)*(1-b1)^(2-Mut12)*(1+epi1)^((Mut11+Mut12-2)*2);
+	}
+	else{
+		fit1=(1-a1)^(2-Mut11)*(1-b1)^(2-Mut12);
+	}
+
+	Mut21=sum(childGenomes.countOfMutationsOfType(m21));
+	Mut22=sum(childGenomes.countOfMutationsOfType(m22));
+	if (Mut21+Mut22>2){
+		fit2=(1-a2)^(2-Mut21)*(1-b2)^(2-Mut22)*(1+epi2)^((Mut21+Mut22-2)*2);
+	}
+	else{
+		fit2=(1-a2)^(2-Mut21)*(1-b2)^(2-Mut22);
+	}
+
+	fit=fit1*fit2;
+
+	test=runif(1, min=0, max=1); // draw number in a uniform distribution between 0 and max fitness. I change Alex's code to Claudia et al 2012, calculate the derived type instead of ancestry type, which alpha and beta are the fitness increase/decrease relative to ancestry allele (fitness=1), and gamma is less than 0.
+	child.tagF=fit; // saved the fitness of the individual
+	if (test>fit){ // if the random numebr is larger than the fitness value, the offspring does not survive
+		child.fitnessScaling=0;
+	} else {
+		child.fitnessScaling=1;
+	}
+	return T;
+}
+
+// If I use early() in WF model, F1 will be at geneartion 4.
+
+32:54 early(){
+	//p3genomes=c(sample(p3.individuals.genomes, 1000));
+	p3ind=c(sample(p3.individuals, 500));
+	p3genomes=c(p3ind.genomes);
+	for(tmp in c(33, 53)){
+		if(sim.generation == tmp){
+		// output the genotype frequencies
+		gab=0;
+		gAb=0;
+		gaB=0;
+		gAB=0;
+	
+		gab1=0;
+		gAb1=0;
+		gaB1=0;
+		gAB1=0;
+	
+		//output allele frequency (p1 alleles)
+		p3Counts = integer(L);
+	
+		for(g in p3genomes){
+			p3Counts = p3Counts + integer(L, 0, 1, g.positionsOfMutationsOfType(m1));
+			
+			Mut11=g.countOfMutationsOfType(m11);
+			Mut12=g.countOfMutationsOfType(m12);
+			gamete_type=paste(c(Mut11, Mut12), sep="");
+			if(gamete_type=="00") {
+				gab=gab+1;
+			}
+			if(gamete_type=="10") {
+				gAb=gAb+1;
+			}
+			if(gamete_type=="01") {
+				gaB=gaB+1;
+			}
+			if(gamete_type=="11") {
+				gAB=gAB+1;
+			}
+			
+			Mut21=g.countOfMutationsOfType(m21);
+			Mut22=g.countOfMutationsOfType(m22);
+			gamete_type1=paste(c(Mut21, Mut22), sep="");
+			if(gamete_type1=="00") {
+				gab1=gab1+1;
+			}
+			if(gamete_type1=="10") {
+				gAb1=gAb1+1;
+			}
+			if(gamete_type1=="01") {
+				gaB1=gaB1+1;
+			}
+			if(gamete_type1=="11") {
+				gAB1=gAB1+1;
+			}
+		}
+
+		writeFile(paste(c(outPath, ".frq"), sep=""), paste(c(sim.generation-3, gab, gAb, gaB, gAB, gab1, gAb1, gaB1, gAB1, p3.individualCount*2),sep="\t"), append=T);
+		}
+	}
+
+	// output the genomes
+	if(genomeOut==1){
+		for(tmp in c(33, 53)){
+			if(sim.generation == tmp){
+				outGen=sim.generation-3;
+				for (g in p3ind.genomes){
+					writeFile(paste(c(outPath, ".F", outGen), sep=""), paste(g.positionsOfMutationsOfType(m1), sep=" "), append=T);
+				}
+			}
+		}
+	}
+}
+
+54 late(){
+		// End of the simulations
+		sim.simulationFinished();
+}

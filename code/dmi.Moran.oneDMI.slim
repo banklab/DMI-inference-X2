@@ -1,0 +1,222 @@
+// Overlapping generation, discrete time interval
+// To estimate the possibility of estimate the DMI in the fish data, we used an overlapping generation model by adding the survival rate, the age structure. The age structure and survival rate are defined arbitray base on the life circle in swordtail fish.
+// Implement only one DMI at first.
+// 
+
+initialize() {
+	initializeSLiMModelType("nonWF");
+	defineConstant("AS", c(0.2, 0.2, 0.0, 0.0, 0.0, 0.0, 0.25, 0.5, 0.75, 1.0)); //define the age strucutre
+
+	// set parameters, first only set one DMI. No others.
+	// the first DMI; default is no epistasis, no selection
+	if(!exists("a1"))
+		defineConstant("a1", 0.001);
+	if(!exists("b1"))
+		defineConstant("b1", 0.002);
+	if(!exists("epi1"))
+		defineConstant("epi1", -0.5);
+	if(!exists("dmi1P1"))
+		defineConstant("dmi1P1", 0.25); // use genetic map instead of the physical coordinate.
+	if(!exists("dmi1P2"))
+		defineConstant("dmi1P2", 0.5);
+//define the chr length
+	defineConstant("L", 1e3);
+//define the size of population 3
+	if(!exists("n0P3"))
+		defineConstant("n0P3", 5000);
+//define output
+	if(!exists("genomeOut"))
+		defineConstant("genomeOut", 1);
+	if(!exists("outPath"))
+		defineConstant("outPath", "./");
+	//if(!exists("seed"))
+	//	defineConstant("seed", getSeed() + 19);
+	
+	setSeed(rdunif(1, 0, asInteger(2^62) - 1));
+	setSeed(getSeed() + 1);
+	initializeMutationRate(0); // only consider the divergence between populations.
+
+	// set markers on a chromosome.
+	initializeMutationType("m1", 0.5, "f", 0.0); // Epi-markers for tracking from population 1.
+	initializeMutationType("m2", 0.5, "f", 0.0); // Chromosome markers
+	m1.convertToSubstitution = F;
+	m2.convertToSubstitution = F;
+	initializeGenomicElementType("g1", m2, 1.0); // set m2 as the markers for population 1
+	initializeGenomicElement(g1, 0, (L-1)); // the genomic length
+	initializeRecombinationRate(1/L); // recombination rate
+	initializeSex("A"); // autosome
+	
+	//dmi1, set as recessive, but it do not matter, as the fitness is recaculated by modifyChild
+	initializeMutationType("m11", 0, "f", 0);
+	m11.convertToSubstitution = F;
+	initializeMutationType("m12", 0, "f", 0);
+	m12.convertToSubstitution = F;
+
+	// assume all the epistasis is negative and the effect is larger than direct selection. The haplotype with any DMI
+	tmp=max(c(1, (1+a1), (1+a1)^2, (1+b1), (1+b1)^2, (1+a1)*(1+b1), (1+a1)^2*(1+b1)*(1+epi1)^2, (1+b1)^2*(1+a1)*(1+epi1)^2, (1+a1)^2*(1+b1)^2*(1+epi1)^4)); // the largest fitness
+	defineConstant("maxF", tmp);
+
+// output the genotype frequencies
+	writeFile(paste(c(outPath, "/dmi_gametes.frq"), sep=""), paste(c("Gen", "gab", "gAb", "gaB", "gAB", "numGenome"), sep="\t"));
+	//writeFile(paste(c(outPath, "/dmi.frq"), sep=""), paste(c("###Gen_alleleFreq"), sep=""));
+//output the genomes
+	if(genomeOut==1) {
+		for(Gen in c(0, 1, 2, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100)) {
+			writeFile(paste(c(outPath, "/", "dmi.F", Gen, ".genome"), sep=""), paste(c("#########","dmi.F", Gen, ".genome########"), sep=""));
+		}
+	}
+}
+
+
+// the fitness change should only happen at the embryo stage? Or later? set as postzygotic imcompatibility?
+
+
+// mutation callback? use less markers and set the recombination rates?
+//reproduction, must add "p3", otherwise, since I killed p1 and p2, the script stuck at some place.
+reproduction(p3, "F"){
+	subpop.addCrossed(individual, subpop.sampleIndividuals(1, sex="M"));
+}
+
+// create the ancestral populations
+1 early(){
+	sim.addSubpop("p1", 5000);
+	sim.addSubpop("p2", 5000);
+	p1.individuals.age=rdunif(5000, min=0, max=9); // set the age structure
+	p2.individuals.age=rdunif(5000, min=0, max=9); // set the age structure
+
+// add DMI
+	p1.genomes.addNewDrawnMutation(m11, asInteger(L*dmi1P1));
+	p2.genomes.addNewDrawnMutation(m12, asInteger(L*dmi1P2));
+// add epi-markers
+	p1.genomes.addNewMutation(m1, 0.0, 0:(L-1)); // epi-markers for tracing alleles from populatoin 1 along the chromosome
+//create hybrid population
+	sim.addSubpop("p3", 0);
+	migrant1=sample(p1.individuals, asInteger(n0P3/2));
+	migrant2=sample(p2.individuals, asInteger(n0P3/2));
+	p3.takeMigrants(c(migrant1, migrant2));
+}
+// We do not consider the demography. If we have to, we should consider the coalescent method, not the forward simulation, considering that the forward method is very slow.
+
+// Now we do not consider the migration or population size change. 
+1 late() {
+	p1.fitnessScaling = 0.0;// kill the parental population 1
+	p1.fitnessScaling = 0.0;// kill the parental population 1
+}
+
+// make hybrid population and remove parental individuals.
+//F1 is the second generation. It is different from WF model. In WF model, population 3 is defined in the 1st generation and take offsprings from the two parental populations, and produce in the 3rd generation. So F1 is in the third geneartion. In nonWF model, P3 is generated and take individual directly from parental species (1st generation) and produce in the next generation (2nd generation. F1 is in the 2nd generation).
+
+// modify the children fitness, only the children are under DMI selection. I assume a postzygotic isolation. A recessive model.
+3:151 modifyChild(p3){
+	childGenomes=c(childGenome1, childGenome2);
+
+	Mut11=sum(childGenomes.countOfMutationsOfType(m11));
+	Mut12=sum(childGenomes.countOfMutationsOfType(m12));
+	
+	if (Mut11+Mut12>2){
+		fit=(1+a1)^Mut11*(1+b1)^Mut12*(1+epi1)^((Mut11+Mut12-2)*2);
+	}
+	else{
+		fit=(1+a1)^Mut11*(1+b1)^Mut12;
+	}
+	
+	test=runif(1, min=0, max=maxF);
+	if (test>fit){
+		child.fitnessScaling=0;
+		return F;
+		}
+	else {
+			child.fitnessScaling=1;
+			return T;
+		}
+}
+
+// kill the parental individuals in the new environment.
+2 early(){
+	// life table based individual mortality
+	ASnewEnv = c(0.2, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+	inds = p3.individuals;
+	ages = inds.age;
+	mortality = ASnewEnv[ages];
+	survival=1-mortality;
+	inds.fitnessScaling=survival;
+	// density-dependence, factoring in individual mortality
+	p3.fitnessScaling = n0P3 / (p3.individualCount*mean(survival));
+}
+
+// control density
+1:151 early(){
+	// life table based individual mortality
+	inds = p3.individuals;
+	ages = inds.age;
+	mortality = AS[ages];
+	survival=1-mortality;
+	inds.fitnessScaling=survival;
+
+	//density-dependence, factoring in individual mortality
+	p3.fitnessScaling = n0P3 / (p3.individualCount*mean(survival));
+}
+
+// Output the genomes. When the genome were outpute, early or late?
+// output the haplotype frequency, without considering the genome or other positions.
+1:151 late(){
+	//p3genomes=c(p3.individuals.genome1[p3.individuals.fitnessScaling==1], p3.individuals.genome2[p3.individuals.fitnessScaling==1]);
+	p3genomes=c(sample(p3.individuals.genomes, 1000));
+// output the genotype frequencies
+	gab=0;
+	gAb=0;
+	gaB=0;
+	gAB=0;
+
+//output allele frequency (p1 alleles)
+	p3Counts = integer(L);
+
+	for(g in p3genomes){
+		p3Counts = p3Counts + integer(L, 0, 1, g.positionsOfMutationsOfType(m1));
+
+		Mut11=g.countOfMutationsOfType(m11);
+		Mut12=g.countOfMutationsOfType(m12);
+
+		gamete_type=paste(c(Mut11, Mut12), sep="");
+		if(gamete_type=="00") {
+			gab=gab+1; next;
+		}
+		if(gamete_type=="10") {
+			gAb=gAb+1; next; 
+		}
+		if(gamete_type=="01") {
+			gaB=gaB+1; next;
+		}
+		if(gamete_type=="11") {
+			gAB=gAB+1; next;
+		}
+	}
+
+	//N_haploidG=p3genomes.size();
+	//gab=gab/N_haploidG;
+	//gAb=gAb/N_haploidG;
+	//gaB=gaB/N_haploidG;
+	//gAB=gAB/N_haploidG;
+	//p3Fractions = p3Counts/N_haploidG;
+	
+	writeFile(paste(c(outPath, "/dmi_gametes.frq"), sep=""), paste(c(sim.generation-1, gab, gAb, gaB, gAB, p3.individualCount*2),sep="\t"), append=T);
+	//writeFile(paste(c(outPath, "/dmi.frq"), sep=""), paste(c(sim.generation-1,p3Fractions),sep="\t"), append=T);
+
+// output the genomes
+	if(genomeOut==1){
+		// Within the *** is the code for exportiong the whole genome of both females and males at a given generation. Can be copy paste (with changing the name of the files) for any generation of interest.
+		for(tmp in c(1, 2, 3, 6, 11, 21, 31, 41, 51, 61, 71, 81, 91, 101)){
+			if(sim.generation == tmp){
+				outGen=sim.generation-1;
+				for (g in p3genomes){
+					writeFile(paste(c(outPath, "/dmi.F", outGen, ".genome"), sep=""), paste(g.positionsOfMutationsOfType(m1)), append=T);
+				}
+			}
+		}
+	}
+}
+
+151 late(){
+	// End of the simulations
+	sim.simulationFinished();
+}
