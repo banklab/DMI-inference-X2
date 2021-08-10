@@ -1,0 +1,1 @@
+This folder contains the code and data to reproduce Figure 6 and Supplementary Figures 6 and 7. The code was written using Mathematica (Version 12.3.1.0). Executing the .nb file will print the figure panels into this folder.
