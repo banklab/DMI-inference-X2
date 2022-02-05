@@ -28,7 +28,7 @@ initialize(){
 	if(!exists("growthR"))
 		defineConstant("growthR", 0);
 
-// the first DMI; default is no epistasis, no selection
+// the first DMI;
 	if(!exists("a1"))
 		defineConstant("a1", rexp(1, 0.001));
 	if(!exists("b1"))
@@ -40,7 +40,7 @@ initialize(){
 	if(!exists("dmi1P2"))
 		defineConstant("dmi1P2", runif(1, min=0, max=1));
 
-// the first DMI; default is no epistasis, no selection
+// the second DMI; 
 	if(!exists("a2"))
 		defineConstant("a2", rexp(1, 0.001));
 	if(!exists("b2"))
@@ -91,9 +91,9 @@ initialize(){
 
 // DMI 2
 	initializeMutationType("m21", 0, "f", 0); // ## recessive. The dominance does not matter, because the fitness is redefined.
-	m11.convertToSubstitution = F;
+	m21.convertToSubstitution = F;
 	initializeMutationType("m22", 0, "f", 0); // ## recessive
-	m12.convertToSubstitution = F;
+	m22.convertToSubstitution = F;
 
 
 	par=paste(c(epi1, dmi1P1, dmi1P2, epi2, dmi2P1, dmi2P2, asInteger(dL*dmi1P1), asInteger(dL*dmi1P2), asInteger(dL*dmi2P1), asInteger(dL*dmi2P2), a1, b2, a2, b2), sep="\t");
