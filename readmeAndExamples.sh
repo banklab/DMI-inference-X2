@@ -1,6 +1,5 @@
 #!/bin/sh
 
-
 wdir=`pwd`
 code=$wdir/code
 data=$wdir/data/
@@ -29,7 +28,8 @@ Modeling DMIs in a diploid population is more complicated than suggested by the 
 B
 ##### 1. Wright-Fisher model, non-overlapping generations;
 :<<C
-Here we provide our script on two DMIs randomly distributed on four chromosomes, and with two neutral chromosome in the same gemone. See method section "False and true positive rates with one and two DMI pairs". All the other senario can be adapt from this script in our paper. 
+There are three models: 1. two-locus one-DMI model (SLiM script: dmi.Moran.oneDMI.slim); 2. four-locus two-DMI model (SLiM script: dmi.WF.twoDMI.6chr.h0h1.slim); 3. three-locus two-DMI model (SLiM script: dmi.WF.twoDMI.3loci.6chr.h0h1.slim);
+Here, we use four-locus two-DMI model as an example. Two DMIs are randomly distributed on four chromosomes, and there are two additional neutral chromosome in the same gemone. See method section "False and true positive rates with one and two DMI pairs". All the other senario can be adapt from this script in our paper. 
 Two DMI (four DMI loci) are randomly distributed on four chromosome. Each chromosome carries 100 makers, the recombination rate betweeen two neighboring markers is 1%. Namely, the genetic map is one marker per centimorgan. In addtion, two neutral crhomosomes are simulated. Therefore, 600 markers in total.
 Chromosomes cannot be simulated independently. They are seperated by recombination rate =0.5. Here, 6 chromosomes are simulated in one genome. Marker 0-399 are four chomorosomes with random two DMIs. 400-599 are two neutral chromosomes. In "1. Parameters", DMI1_loc1(randomNum) is draw from a uniform distribution [0,1], which is the relative position at four chromosomes. DMI1_loc1(randomNum)X400 is DMI1_loc1(genomeCoordinate). SLiM assumes a chromosome starts from 0. For convience, in our script, we assume a chromosome starts from 1.
 In this script, genomes of 500 individuals from generation 30 and generation 50 are recorded.
